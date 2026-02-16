@@ -3,3 +3,5 @@ transformers==4.34.0
 gensim
 scikit-learn
 tqdm
+spotipy
+requests

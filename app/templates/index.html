@@ -186,6 +186,49 @@
             height: 24px
         }
 
+        /* ─── spotify auth ─── */
+        .spotify-section {
+            width: 100%;
+            max-width: 700px;
+            background: var(--card-bg-light);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .spotify-section.active {
+            display: flex;
+        }
+
+        .save-button {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 24px;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity .2s;
+            font-size: 0.95rem;
+        }
+
+        .save-button:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .save-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .spotify-status {
+            font-size: 0.9rem;
+            color: var(--accent);
+        }
+
         /* ─── footer ─── */
         footer {
             margin-top: 52px;
@@ -200,14 +243,17 @@
 <body>
     <!-- Logos -->
     <div class="top-bar">
-        <a href="https://anonymous.4open.science/r/DEMO-playlist-continuation-F06C/README.md" target="_blank" rel="noopener">
+        <a href="https://www.eurecom.fr/en/node/388" target="_blank" rel="noopener">
+            <img src="/static/images/eurecom-logo.png" alt="Eurecom Logo">
+        </a>
+        <a href="https://github.com/elea-vellard/LLM-Playlist-Recommender" target="_blank" rel="noopener">
             <img src="{{ url_for('static', filename='images/github-logo.png') }}" alt="GitHub Logo">
         </a>
     </div>
 
     <!-- Title -->
     <div class="title">LLM-Based Playlist Recommender</div>
-    <div class="subtitle">designed by XX</div>
+    <div class="subtitle">designed by Eléa Vellard and Enzo Charolois-Pasqua</div>
     <div class="accent-line"></div>
 
     <!-- Description -->
@@ -228,21 +274,104 @@
 
 
 
+    <!-- Spotify Section -->
+    <div id="spotify-section" class="spotify-section">
+        <div class="spotify-status" id="spotify-status"></div>
+        <button id="auth-button" class="save-button" onclick="authorizeSpotify()">Authorize with Spotify</button>
+        <button id="save-button" class="save-button" style="display:none;" onclick="savePlaylistToSpotify()">Save Playlist</button>
+    </div>
+
     <!-- Recommendations -->
     <div id="rec-title" class="recommendations-header"></div>
     <ul id="results" class="recommendations-list"></ul>
 
     <!-- Footer -->
     <footer>
-        A project by XX —
-        June&nbsp;2025
+        Enzo Charolois-Pasqua, Eléa Vellard, Youssra Rebboud, Pasquale Lisena, and Raphael Troncy. 2025.  <b>A Language Model-Based Playlist Generation Recommender System.</b> In Proceedings of the Nineteenth ACM Conference on Recommender Systems (RecSys ’25), September 22-26, 2025, Prague, Czech Republic. ACM, New York, NY, USA, 11 pages. https://doi.org/10.1145/3705328.3748053
+
+
     </footer>
 
     <!-- Script -->
     <script>
+        let spotifyAccessToken = null;
+        let currentPlaylistName = '';
+        let currentRecommendations = [];
+
+        // Check if we're returning from Spotify auth
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        if (params.has('access_token')) {
+            spotifyAccessToken = params.get('access_token');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        function updateSpotifyUI() {
+            const section = document.getElementById('spotify-section');
+            const authBtn = document.getElementById('auth-button');
+            const saveBtn = document.getElementById('save-button');
+            const status = document.getElementById('spotify-status');
+
+            if (spotifyAccessToken) {
+                section.classList.add('active');
+                authBtn.style.display = 'none';
+                saveBtn.style.display = currentRecommendations.length > 0 ? 'block' : 'none';
+                status.textContent = '✓ Connected to Spotify';
+            } else {
+                section.classList.add('active');
+                authBtn.style.display = 'block';
+                saveBtn.style.display = 'none';
+                status.textContent = 'Connect your Spotify account to save playlists';
+            }
+        }
+
+        function authorizeSpotify() {
+            const clientId = '4d38a085f819462680e104b6e5d2e43c';
+            const redirectUri = window.location.origin + window.location.pathname;
+            const scopes = 'playlist-modify-public playlist-modify-private';
+            const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+            window.location.href = authUrl;
+        }
+
+        async function savePlaylistToSpotify() {
+            if (!spotifyAccessToken || !currentPlaylistName || currentRecommendations.length === 0) {
+                alert('Missing playlist data');
+                return;
+            }
+
+            const saveBtn = document.getElementById('save-button');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+
+            try {
+                const res = await fetch('/save-playlist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        access_token: spotifyAccessToken,
+                        playlist_name: currentPlaylistName,
+                        track_uris: currentRecommendations.map(r => r.uri)
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.playlist_url) {
+                    window.open(data.playlist_url, '_blank');
+                    alert('Playlist saved successfully!');
+                } else {
+                    alert('Error saving playlist: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Error saving playlist: ' + err.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Playlist to Spotify';
+            }
+        }
+
         async function ask() {
             const q = document.getElementById('q').value.trim();
             if (!q) return;
+            currentPlaylistName = q;
             document.getElementById('rec-title').textContent = 'Loading…';
             document.getElementById('results').innerHTML = '';
             try {
@@ -251,8 +380,12 @@
                 if (!res.ok || data.error) {
                     document.getElementById('rec-title').textContent = 'Error fetching recommendations.'; return;
                 }
-                document.getElementById('rec-title').textContent = `Top 10 recommendations for "${q}". Click the green Spotify icon to play a
-            track.`;
+                currentRecommendations = data.recommendations;
+                document.getElementById('rec-title').textContent = `Top 10 recommendations for "${q}". Click the green Spotify icon to play a track.`;
+                // Update save button visibility
+                if (spotifyAccessToken && currentRecommendations.length > 0) {
+                    document.getElementById('save-button').style.display = 'block';
+                }
                 render(data.recommendations);
             } catch {
                 document.getElementById('rec-title').textContent = 'Unexpected error.';
@@ -270,6 +403,9 @@
                 li.appendChild(btn); ul.appendChild(li);
             });
         }
+
+        // Initialize Spotify UI on page load
+        updateSpotifyUI();
     </script>
 </body>
 
