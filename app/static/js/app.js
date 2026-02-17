@@ -1,4 +1,4 @@
-let spotifyAccessToken = null;
+let spotifyConnected = false;
 let currentPlaylistName = '';
 let currentRecommendations = [];
 
@@ -13,37 +13,62 @@ function getSpotifyIconUrl() {
 function updateSpotifyUI() {
     const section = document.getElementById('spotify-section');
     const authBtn = document.getElementById('auth-button');
+    const logoutBtn = document.getElementById('logout-button');
     const saveBtn = document.getElementById('save-button');
     const status = document.getElementById('spotify-status');
 
-    if (!section || !authBtn || !saveBtn || !status) {
+    if (!section || !authBtn || !logoutBtn || !saveBtn || !status) {
         return;
     }
 
     section.classList.add('active');
 
-    if (spotifyAccessToken) {
+    if (spotifyConnected) {
         authBtn.style.display = 'none';
+        logoutBtn.style.display = 'block';
         saveBtn.style.display = currentRecommendations.length > 0 ? 'block' : 'none';
         status.textContent = '✓ Connected to Spotify';
         return;
     }
 
     authBtn.style.display = 'block';
+    logoutBtn.style.display = 'none';
     saveBtn.style.display = 'none';
     status.textContent = 'Connect your Spotify account to save playlists';
 }
 
 function authorizeSpotify() {
-    const clientId = '4d38a085f819462680e104b6e5d2e43c';
-    const redirectUri = window.location.origin + window.location.pathname;
-    const scopes = 'playlist-modify-public playlist-modify-private';
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
-    window.location.href = authUrl;
+    window.location.href = '/spotify-login';
+}
+
+async function fetchSpotifyAuthStatus() {
+    try {
+        const res = await fetch('/spotify-auth-status');
+        const data = await res.json();
+        spotifyConnected = Boolean(res.ok && data.connected);
+    } catch {
+        spotifyConnected = false;
+    }
+
+    updateSpotifyUI();
+}
+
+async function disconnectSpotify() {
+    try {
+        const res = await fetch('/spotify-logout', { method: 'POST' });
+        if (!res.ok) {
+            alert('Error disconnecting Spotify.');
+            return;
+        }
+        spotifyConnected = false;
+        updateSpotifyUI();
+    } catch {
+        alert('Error disconnecting Spotify.');
+    }
 }
 
 async function savePlaylistToSpotify() {
-    if (!spotifyAccessToken || !currentPlaylistName || currentRecommendations.length === 0) {
+    if (!spotifyConnected || !currentPlaylistName || currentRecommendations.length === 0) {
         alert('Missing playlist data');
         return;
     }
@@ -61,7 +86,6 @@ async function savePlaylistToSpotify() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                access_token: spotifyAccessToken,
                 playlist_name: currentPlaylistName,
                 track_uris: currentRecommendations.map(r => r.uri)
             })
@@ -146,14 +170,9 @@ function render(recs) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const params = new URLSearchParams(window.location.hash.substring(1));
-    if (params.has('access_token')) {
-        spotifyAccessToken = params.get('access_token');
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
     const input = document.getElementById('q');
     const authBtn = document.getElementById('auth-button');
+    const logoutBtn = document.getElementById('logout-button');
     const saveBtn = document.getElementById('save-button');
 
     if (input) {
@@ -168,9 +187,13 @@ document.addEventListener('DOMContentLoaded', () => {
         authBtn.addEventListener('click', authorizeSpotify);
     }
 
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', disconnectSpotify);
+    }
+
     if (saveBtn) {
         saveBtn.addEventListener('click', savePlaylistToSpotify);
     }
 
-    updateSpotifyUI();
+    fetchSpotifyAuthStatus();
 });
