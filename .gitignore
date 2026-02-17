@@ -98,7 +98,6 @@ htmlcov/
 
 # Docker
 *.tar
-.dockerignore
 
 # Temporary files
 *.tmp
