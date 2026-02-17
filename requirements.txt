@@ -5,3 +5,4 @@ scikit-learn
 tqdm
 spotipy
 requests
+numpy==1.26.4
