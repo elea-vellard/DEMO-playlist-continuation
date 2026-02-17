@@ -47,6 +47,7 @@ For production, use your actual domain in the redirect URI.
 ---
 
 ## Run the demo locally
+
 ### 1. Download the data
 
 First, populate the `app/data/` directory:
@@ -138,7 +139,7 @@ docker run --rm \
 Or load from `.env` file:
 
 ```bash
-docker run --rm -p 8080:8080 -v $(pwd)/logs:/app/logs --env-file .env playlist-recommendation:latest
+docker run --name playlist-recommendation --restart=unless-stopped -p 9981:8080 -v $(pwd)/logs:/app/logs -v $(pwd)/app/data:/app/data --env-file .env playlist-recommendation:latest
 ```
 
 **Note:** The `-v $(pwd)/logs:/app/logs` mount ensures the `saved_playlists.log` file persists on your host machine.
